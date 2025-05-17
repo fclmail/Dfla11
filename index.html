@@ -63,7 +63,6 @@
 </table>
 
 <script>
-  // Declare variables outside functions to keep state
   let provider;
   let signer;
   let userAddress;
@@ -71,7 +70,6 @@
   let tradingInterval;
   let tradingActive = false;
 
-  // Your deployed contract address and ABI
   const contractAddress = "0xe0A6d56Fbc4a4E4E94E0D2B9D52adc323Dfa55Ee";
   const contractABI = [
     "function owner() view returns (address)",
@@ -79,7 +77,6 @@
     "function getProfit() view returns (uint256)"
   ];
 
-  // UI elements
   const connectWalletBtn = document.getElementById("connectWalletBtn");
   const stopTradingBtn = document.getElementById("stopTradingBtn");
   const testConnectionBtn = document.getElementById("testConnectionBtn");
@@ -98,10 +95,7 @@
     }
 
     try {
-      // Request account access if needed
       await window.ethereum.request({ method: "eth_requestAccounts" });
-
-      // Initialize provider and signer
       provider = new ethers.providers.Web3Provider(window.ethereum);
       signer = provider.getSigner();
 
@@ -121,6 +115,26 @@
       console.error("Wallet connection failed:", error);
       statusDiv.textContent = "⚠️ Wallet connection failed: " + error.message;
     }
+  }
+
+  // MetaMask Connection Type 4: Handle account and chain changes
+  if (window.ethereum) {
+    window.ethereum.on("accountsChanged", async (accounts) => {
+      if (accounts.length === 0) {
+        statusDiv.textContent = "Wallet disconnected.";
+        walletInfoDiv.innerHTML = "";
+        connectWalletBtn.disabled = false;
+        stopTrading();
+      } else {
+        userAddress = accounts[0];
+        walletInfoDiv.innerHTML = `<b>Connected Wallet:</b> ${userAddress}`;
+        statusDiv.textContent = "Wallet reconnected.";
+      }
+    });
+
+    window.ethereum.on("chainChanged", (_chainId) => {
+      window.location.reload();
+    });
   }
 
   async function testConnection() {
@@ -147,7 +161,6 @@
   }
 
   async function fetchArbitrageOpportunities() {
-    // Placeholder - replace with your real arbitrage logic
     return [
       {
         buyRouter: "QuickSwap",
@@ -223,8 +236,8 @@
       }
     }
 
-    loop(); // Run loop immediately
-    tradingInterval = setInterval(loop, 10_000); // Repeat every 10 seconds
+    loop(); // Run immediately
+    tradingInterval = setInterval(loop, 10000); // Run every 10 seconds
   }
 </script>
 
