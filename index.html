@@ -35,6 +35,8 @@
       font-weight: bold;
     }
   </style>
+  <!-- Ethers.js library -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -61,10 +63,8 @@
   <tbody id="profitBody"></tbody>
 </table>
 
-<!-- Load ethers.js here -->
-<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js" crossorigin="anonymous"></script>
+<!-- Include WalletConnect provider if needed (optional; not used here) -->
 
-<!-- Main script -->
 <script>
   let provider;
   let signer;
@@ -91,38 +91,84 @@
   stopTradingBtn.onclick = stopTrading;
   testConnectionBtn.onclick = testConnection;
 
+  // Enhance: Handle account & chain changes
+  if (window.ethereum) {
+    window.ethereum.on("accountsChanged", (accounts) => {
+      if (accounts.length === 0) {
+        statusDiv.textContent = "Wallet disconnected.";
+        walletInfoDiv.innerHTML = "";
+        connectWalletBtn.disabled = false;
+        stopTrading();
+      } else {
+        userAddress = accounts[0];
+        walletInfoDiv.innerHTML = `<b>Connected Wallet:</b> ${userAddress}`;
+        statusDiv.textContent = "Wallet reconnected.";
+      }
+    });
+
+    window.ethereum.on("chainChanged", (_chainId) => {
+      // Reload to reset app state on chain change
+      window.location.reload();
+    });
+  }
+
   async function connectWallet() {
     if (!window.ethereum) {
-      alert("MetaMask not detected");
+      alert("MetaMask is not installed. Please install MetaMask and try again.");
       return;
     }
 
     try {
-      await window.ethereum.request({ method: "eth_requestAccounts" });
+      // Check if already connected
+      const accounts = await window.ethereum.request({ method: "eth_accounts" });
+      if (accounts.length === 0) {
+        // Request account access
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+      }
+
       provider = new ethers.providers.Web3Provider(window.ethereum);
       signer = provider.getSigner();
+
+      // Verify network (Polygon: chainId 137)
+      const network = await provider.getNetwork();
+      if (network.chainId !== 137) {
+        // Programmatically switch network
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x89' }], // hex for 137
+          });
+          // After switching, update provider and signer
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          signer = provider.getSigner();
+        } catch (switchError) {
+          // Handle error (e.g., user rejected or network not added)
+          if (switchError.code === 4902) {
+            alert("Please add Polygon network to MetaMask.");
+          } else {
+            throw switchError;
+          }
+          return; // exit, user needs to switch manually
+        }
+      }
+
       userAddress = await signer.getAddress();
       walletInfoDiv.innerHTML = `<b>Connected Wallet:</b> ${userAddress}`;
       statusDiv.textContent = "Wallet connected.";
+
+      // Initialize contract instance
       contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      // Enable buttons
       connectWalletBtn.disabled = true;
       stopTradingBtn.disabled = false;
       testConnectionBtn.disabled = false;
+
       startTradingLoop();
+
     } catch (error) {
       console.error("Wallet connection failed:", error);
       statusDiv.textContent = "⚠️ Wallet connection failed: " + error.message;
-    }
-  }
-
-  async function testConnection() {
-    try {
-      if (!contract) throw new Error("Contract not initialized.");
-      const owner = await contract.owner();
-      statusDiv.textContent = `✅ Connection test successful. Contract owner: ${owner}`;
-    } catch (error) {
-      console.error("Connection test failed:", error);
-      statusDiv.textContent = "❌ Connection test failed: " + error.message;
     }
   }
 
@@ -138,7 +184,19 @@
     }
   }
 
+  async function testConnection() {
+    try {
+      if (!contract) throw new Error("Contract not initialized.");
+      const owner = await contract.owner();
+      statusDiv.textContent = `✅ Connection test successful. Contract owner: ${owner}`;
+    } catch (error) {
+      console.error("Connection test failed:", error);
+      statusDiv.textContent = "❌ Connection test failed: " + error.message;
+    }
+  }
+
   async function fetchArbitrageOpportunities() {
+    // You can replace this with your actual fetch logic
     return [
       {
         buyRouter: "QuickSwap",
@@ -186,11 +244,13 @@
         return;
       }
       statusDiv.textContent = `Executing trade for ${opp.token} with profit ${opp.profit.toFixed(2)} USDC...`;
+
       const buyAmountWei = ethers.utils.parseUnits(opp.buyAmount.toString(), 6);
       const tx = await contract.tradeArbitrage(buyAmountWei);
       statusDiv.textContent = `Transaction sent: ${tx.hash}. Waiting for confirmation...`;
       await tx.wait();
       statusDiv.textContent = `Trade executed successfully! TxHash: ${tx.hash}`;
+
     } catch (error) {
       console.error("Trade execution error:", error);
       statusDiv.textContent = "Trade failed: " + error.message;
@@ -201,6 +261,7 @@
     if (tradingActive) return;
     tradingActive = true;
     statusDiv.textContent = "Starting trading loop...";
+
     async function loop() {
       try {
         const opportunities = await fetchArbitrageOpportunities();
@@ -210,8 +271,9 @@
         statusDiv.textContent = "Error in trading loop: " + error.message;
       }
     }
-    loop();
-    tradingInterval = setInterval(loop, 10000);
+
+    loop(); // Run immediately
+    tradingInterval = setInterval(loop, 10000); // Run every 10 seconds
   }
 </script>
 
