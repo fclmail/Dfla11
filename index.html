@@ -35,7 +35,6 @@
       font-weight: bold;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -62,6 +61,10 @@
   <tbody id="profitBody"></tbody>
 </table>
 
+<!-- Load ethers.js here -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js" crossorigin="anonymous"></script>
+
+<!-- Main script -->
 <script>
   let provider;
   let signer;
@@ -98,43 +101,18 @@
       await window.ethereum.request({ method: "eth_requestAccounts" });
       provider = new ethers.providers.Web3Provider(window.ethereum);
       signer = provider.getSigner();
-
       userAddress = await signer.getAddress();
       walletInfoDiv.innerHTML = `<b>Connected Wallet:</b> ${userAddress}`;
       statusDiv.textContent = "Wallet connected.";
-
       contract = new ethers.Contract(contractAddress, contractABI, signer);
-
       connectWalletBtn.disabled = true;
       stopTradingBtn.disabled = false;
       testConnectionBtn.disabled = false;
-
       startTradingLoop();
-
     } catch (error) {
       console.error("Wallet connection failed:", error);
       statusDiv.textContent = "⚠️ Wallet connection failed: " + error.message;
     }
-  }
-
-  // MetaMask Connection Type 4: Handle account and chain changes
-  if (window.ethereum) {
-    window.ethereum.on("accountsChanged", async (accounts) => {
-      if (accounts.length === 0) {
-        statusDiv.textContent = "Wallet disconnected.";
-        walletInfoDiv.innerHTML = "";
-        connectWalletBtn.disabled = false;
-        stopTrading();
-      } else {
-        userAddress = accounts[0];
-        walletInfoDiv.innerHTML = `<b>Connected Wallet:</b> ${userAddress}`;
-        statusDiv.textContent = "Wallet reconnected.";
-      }
-    });
-
-    window.ethereum.on("chainChanged", (_chainId) => {
-      window.location.reload();
-    });
   }
 
   async function testConnection() {
@@ -208,13 +186,11 @@
         return;
       }
       statusDiv.textContent = `Executing trade for ${opp.token} with profit ${opp.profit.toFixed(2)} USDC...`;
-
       const buyAmountWei = ethers.utils.parseUnits(opp.buyAmount.toString(), 6);
       const tx = await contract.tradeArbitrage(buyAmountWei);
       statusDiv.textContent = `Transaction sent: ${tx.hash}. Waiting for confirmation...`;
       await tx.wait();
       statusDiv.textContent = `Trade executed successfully! TxHash: ${tx.hash}`;
-
     } catch (error) {
       console.error("Trade execution error:", error);
       statusDiv.textContent = "Trade failed: " + error.message;
@@ -225,7 +201,6 @@
     if (tradingActive) return;
     tradingActive = true;
     statusDiv.textContent = "Starting trading loop...";
-
     async function loop() {
       try {
         const opportunities = await fetchArbitrageOpportunities();
@@ -235,9 +210,8 @@
         statusDiv.textContent = "Error in trading loop: " + error.message;
       }
     }
-
-    loop(); // Run immediately
-    tradingInterval = setInterval(loop, 10000); // Run every 10 seconds
+    loop();
+    tradingInterval = setInterval(loop, 10000);
   }
 </script>
 
