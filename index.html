@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Polygon Flash Loan Arbitrage DApp</title>
+  <style>
+    body {
+      background-color: #001F3F;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #profitTable {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    #profitTable th, #profitTable td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    #profitTable th {
+      background-color: #003366;
+    }
+    button {
+      margin: 10px 5px 10px 0;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #status {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<h1>Polygon Flash Loan Arbitrage DApp</h1>
+
+<button id="connectWalletBtn">Connect Wallet</button>
+<button id="stopTradingBtn" disabled>Stop Trading</button>
+<button id="testConnectionBtn" disabled>Test Connection</button>
+
+<div id="walletInfo"></div>
+<div id="status"></div>
+
+<table id="profitTable">
+  <thead>
+    <tr>
+      <th>Buy Router</th>
+      <th>Sell Router</th>
+      <th>Token</th>
+      <th>Buy Amount (USDC)</th>
+      <th>Profit (USDC)</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="profitBody"></tbody>
+</table>
+
+<script>
+  // Declare variables outside functions to keep state
+  let provider;
+  let signer;
+  let userAddress;
+  let contract;
+  let tradingInterval;
+  let tradingActive = false;
+
+  // Your deployed contract address and ABI
+  const contractAddress = "0xe0A6d56Fbc4a4E4E94E0D2B9D52adc323Dfa55Ee";
+  const contractABI = [
+    "function owner() view returns (address)",
+    "function tradeArbitrage(uint256 buyAmount) public",
+    "function getProfit() view returns (uint256)"
+  ];
+
+  // UI elements
+  const connectWalletBtn = document.getElementById("connectWalletBtn");
+  const stopTradingBtn = document.getElementById("stopTradingBtn");
+  const testConnectionBtn = document.getElementById("testConnectionBtn");
+  const walletInfoDiv = document.getElementById("walletInfo");
+  const statusDiv = document.getElementById("status");
+  const profitBody = document.getElementById("profitBody");
+
+  connectWalletBtn.onclick = connectWallet;
+  stopTradingBtn.onclick = stopTrading;
+  testConnectionBtn.onclick = testConnection;
+
+  async function connectWallet() {
+    if (!window.ethereum) {
+      alert("MetaMask not detected");
+      return;
+    }
+
+    try {
+      // Request account access if needed
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+
+      // Initialize provider and signer
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer = provider.getSigner();
+
+      userAddress = await signer.getAddress();
+      walletInfoDiv.innerHTML = `<b>Connected Wallet:</b> ${userAddress}`;
+      statusDiv.textContent = "Wallet connected.";
+
+      contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      connectWalletBtn.disabled = true;
+      stopTradingBtn.disabled = false;
+      testConnectionBtn.disabled = false;
+
+      startTradingLoop();
+
+    } catch (error) {
+      console.error("Wallet connection failed:", error);
+      statusDiv.textContent = "⚠️ Wallet connection failed: " + error.message;
+    }
+  }
+
+  async function testConnection() {
+    try {
+      if (!contract) throw new Error("Contract not initialized.");
+      const owner = await contract.owner();
+      statusDiv.textContent = `✅ Connection test successful. Contract owner: ${owner}`;
+    } catch (error) {
+      console.error("Connection test failed:", error);
+      statusDiv.textContent = "❌ Connection test failed: " + error.message;
+    }
+  }
+
+  function stopTrading() {
+    if (tradingInterval) {
+      clearInterval(tradingInterval);
+      tradingInterval = null;
+      tradingActive = false;
+      statusDiv.textContent = "Trading stopped.";
+      stopTradingBtn.disabled = true;
+      connectWalletBtn.disabled = false;
+      testConnectionBtn.disabled = true;
+    }
+  }
+
+  async function fetchArbitrageOpportunities() {
+    // Placeholder - replace with your real arbitrage logic
+    return [
+      {
+        buyRouter: "QuickSwap",
+        sellRouter: "SushiSwap",
+        token: "WMATIC",
+        buyAmount: 10,
+        profit: 45,
+      },
+      {
+        buyRouter: "ApeSwap",
+        sellRouter: "Dfyn",
+        token: "USDT",
+        buyAmount: 100,
+        profit: -5,
+      }
+    ];
+  }
+
+  function updateProfitTable(opportunities) {
+    profitBody.innerHTML = "";
+    opportunities.forEach((opp, index) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${opp.buyRouter}</td>
+        <td>${opp.sellRouter}</td>
+        <td>${opp.token}</td>
+        <td>${opp.buyAmount.toFixed(2)}</td>
+        <td style="color:${opp.profit > 0 ? 'lightgreen' : 'red'}">${opp.profit.toFixed(2)}</td>
+        <td>${opp.profit > 0 ? `<button onclick="executeTrade(${index})">Trade</button>` : "No Trade"}</td>
+      `;
+      profitBody.appendChild(row);
+    });
+  }
+
+  async function executeTrade(index) {
+    if (!tradingActive) {
+      alert("Trading is stopped. Please connect wallet and start trading.");
+      return;
+    }
+    try {
+      const opportunities = await fetchArbitrageOpportunities();
+      const opp = opportunities[index];
+      if (opp.profit <= 0) {
+        alert("Trade is not profitable, skipping.");
+        return;
+      }
+      statusDiv.textContent = `Executing trade for ${opp.token} with profit ${opp.profit.toFixed(2)} USDC...`;
+
+      const buyAmountWei = ethers.utils.parseUnits(opp.buyAmount.toString(), 6);
+      const tx = await contract.tradeArbitrage(buyAmountWei);
+      statusDiv.textContent = `Transaction sent: ${tx.hash}. Waiting for confirmation...`;
+      await tx.wait();
+      statusDiv.textContent = `Trade executed successfully! TxHash: ${tx.hash}`;
+
+    } catch (error) {
+      console.error("Trade execution error:", error);
+      statusDiv.textContent = "Trade failed: " + error.message;
+    }
+  }
+
+  function startTradingLoop() {
+    if (tradingActive) return;
+    tradingActive = true;
+    statusDiv.textContent = "Starting trading loop...";
+
+    async function loop() {
+      try {
+        const opportunities = await fetchArbitrageOpportunities();
+        updateProfitTable(opportunities);
+      } catch (error) {
+        console.error("Error in trading loop:", error);
+        statusDiv.textContent = "Error in trading loop: " + error.message;
+      }
+    }
+
+    loop(); // Run loop immediately
+    tradingInterval = setInterval(loop, 10_000); // Repeat every 10 seconds
+  }
+</script>
+
+</body>
+</html>
